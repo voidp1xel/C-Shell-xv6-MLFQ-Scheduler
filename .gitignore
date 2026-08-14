@@ -1,0 +1,16 @@
+# Binaries & build artifacts
+*.o
+*.out
+shell.out
+c-shell/shell.out
+
+# xv6 build artifacts
+xv6/fs.img
+xv6/xv6.img
+xv6/kernel/kernel
+xv6/user/_*
+
+# Editor / OS metadata
+.DS_Store
+*.swp
+*~
