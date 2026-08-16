@@ -18,6 +18,7 @@ int main(){
     int home_directory_size = strlen(home_directory);
 
     while(1){
+        //home directory function
         char* username = getenv("USER");
         if(username == NULL) username = "no_name_user";
 
@@ -28,14 +29,31 @@ int main(){
         getcwd(cwd, sizeof(cwd));
 
         if(strncmp(cwd, home_directory, home_directory_size) == 0){
-            printf("<%s@%s:~%s> ", username, hostname,  cwd + home_directory_size);
+            printf("<%s@%s:~%s> ", username, hostname,  cwd + home_directory_size);//compares string-> if home directory found then doesnt output '~'
         }
         else{
             printf("<%s@%s:%s> ", username, hostname, cwd);
         }
+
+        fflush(stdout);
+
+        //user input starts
+
+        char* user_input = NULL;
+        size_t length = 0;
+        ssize_t read = getline(&user_input, &length, stdin); //knows and calculates exact size
+
+        if(read == -1){ //Ctrl+D situation
+            printf("Exiting\n");
+            free(user_input);
+            break;
+        }
+
+        if(user_input[read-1] == '\n') user_input[read-1] = '\0';
+
+        free(user_input);
+
     }
-
-
-
+    return 0;
 }
 
