@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
+#include "../include/lexer.h"
 
 #ifndef MAXPATHLEN
 #define MAXPATHLEN 4096
@@ -35,12 +36,12 @@ int main(){
             printf("<%s@%s:%s> ", username, hostname, cwd);
         }
 
-        fflush(stdout);
+        fflush(stdout); //prints outpout even if \n is not present->forces to print
 
         //user input starts
 
         char* user_input = NULL;
-        size_t length = 0;
+        size_t length = 0; //used size_t bcs int is limited to 32 bits, if we want to open large file then this is the way. size_t dynamically adabts to bits your system can use
         ssize_t read = getline(&user_input, &length, stdin); //knows and calculates exact size
 
         if(read == -1){ //Ctrl+D situation
