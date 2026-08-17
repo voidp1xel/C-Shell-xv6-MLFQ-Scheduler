@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lexer.h"
+#include "../include/lexer.h"
 
 void clear_tokens(token* head) {
     token* current = head;

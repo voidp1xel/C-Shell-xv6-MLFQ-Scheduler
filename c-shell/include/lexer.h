@@ -23,4 +23,7 @@ typedef struct token{
     struct token* next;
 }token;
 
+token* make_token(char* user_input);
+void clear_tokens(token* head);
+
 #endif
