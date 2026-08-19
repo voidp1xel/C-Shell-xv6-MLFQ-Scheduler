@@ -4,6 +4,7 @@
 #include "../include/hop.h"
 #include "../include/reveal.h"
 #include "../include/peek.h"
+#include "../include/locate.h"
 
 void parse_and_execute(token* token_list, char* home_directory, char* prev_directory){
     if (token_list == NULL) return; //failsafe
@@ -90,6 +91,29 @@ void parse_and_execute(token* token_list, char* home_directory, char* prev_direc
         }
         else{
             execute_peek(n_flag, r_flag, targets, target_count);
+        }
+    }
+
+    //PARSER FOR LOCATE
+    else if(token_list->type == word_type && strcmp(token_list->value, "locate") == 0){
+        char* targets[256]; //array to hold command names
+        int target_count = 0;
+
+        token* current_arg = token_list->next;
+
+        while (current_arg != NULL && current_arg->type == word_type){
+            if (target_count < 256) {
+                targets[target_count] = current_arg->value;
+                target_count++;
+            }
+            current_arg = current_arg->next;
+        }
+
+        if (target_count == 0) {
+            printf("locate: invalid syntax\n"); //spec explicitly requires this if no args given
+        }
+        else{
+            execute_locate(targets, target_count);
         }
     }
 }
