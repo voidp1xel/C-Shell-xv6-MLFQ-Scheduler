@@ -5,6 +5,7 @@
 #include "../include/reveal.h"
 #include "../include/peek.h"
 #include "../include/locate.h"
+#include "../include/execute.h"
 
 void parse_and_execute(token* token_list, char* home_directory, char* prev_directory){
     if (token_list == NULL) return; //failsafe
@@ -115,5 +116,26 @@ void parse_and_execute(token* token_list, char* home_directory, char* prev_direc
         else{
             execute_locate(targets, target_count);
         }
+    }
+
+    //CATCH-ALL FOR EXTERNAL COMMANDS (Part C1)
+    else if (token_list->type == word_type) {
+        char* args[256];
+        int arg_count = 0;
+
+        token* current_arg = token_list;
+
+        // execv() requires an array of strings, where the first item is the command itself,
+        // followed by its arguments, and strictly terminated by a NULL pointer.
+        while (current_arg != NULL && current_arg->type == word_type) {
+            if (arg_count < 255) {
+                args[arg_count] = current_arg->value;
+                arg_count++;
+            }
+            current_arg = current_arg->next;
+        }
+        args[arg_count] = NULL; // Crucial for execv to know where the array ends
+
+        execute_external_command(args);
     }
 }
