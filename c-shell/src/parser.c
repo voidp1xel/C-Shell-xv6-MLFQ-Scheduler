@@ -153,7 +153,7 @@ void parse_and_execute(token* token_list, char* home_directory, char* prev_direc
             } 
             else if (current_arg->type == greater_than_type || current_arg->type == greater_than_greater_than_type) { // Found a '>' or '>>'
                 int is_append = (current_arg->type == greater_than_greater_than_type);
-                current_arg = current_arg->next;å
+                current_arg = current_arg->next;
                 if (current_arg != NULL && current_arg->type == word_type) {
                     outputs[output_count] = current_arg->value;
                     output_append[output_count] = is_append; // Mark 1 if append, 0 if truncate
