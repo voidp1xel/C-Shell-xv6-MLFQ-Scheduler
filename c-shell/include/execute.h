@@ -1,6 +1,8 @@
 #ifndef EXECUTE_H
 #define EXECUTE_H
 
-int execute_external_command(char** args, char** inputs, int input_count, char** outputs, int* output_append, int output_count);
+#include "lexer.h"
+
+void execute_pipeline(token* token_list);
 
 #endif

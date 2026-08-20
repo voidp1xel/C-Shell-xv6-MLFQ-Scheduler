@@ -118,59 +118,8 @@ void parse_and_execute(token* token_list, char* home_directory, char* prev_direc
         }
     }
 
-    // CATCH-ALL FOR EXTERNAL COMMANDS & REDIRECTION (Part C1, C2, C3)
+   // CATCH-ALL FOR EXTERNAL COMMANDS, REDIRECTION, AND PIPES (Part C1, C2, C3, C4)
     else if (token_list->type == word_type) {
-        char* args[256];
-        int arg_count = 0;
-        
-        char* inputs[256];
-        int input_count = 0;
-        
-        char* outputs[256];
-        int output_append[256]; // 1 for >> (append), 0 for > (truncate)
-        int output_count = 0;
-        
-        int syntax_error = 0;
-
-        token* current_arg = token_list;
-
-        // Loop through tokens. Stop if we hit a pipe or background operator
-        while (current_arg != NULL && current_arg->type != semicolon_type && 
-               current_arg->type != ambersand_type && current_arg->type != pipe_type) {
-            
-            if (current_arg->type == word_type) {
-                if (arg_count < 255) {
-                    args[arg_count++] = current_arg->value;
-                }
-            } 
-            else if (current_arg->type == less_than_type) { // Found a '<'
-                current_arg = current_arg->next;
-                if (current_arg != NULL && current_arg->type == word_type) {
-                    inputs[input_count++] = current_arg->value;
-                } else {
-                    syntax_error = 1; break; // Missing filename after <
-                }
-            } 
-            else if (current_arg->type == greater_than_type || current_arg->type == greater_than_greater_than_type) { // Found a '>' or '>>'
-                int is_append = (current_arg->type == greater_than_greater_than_type);
-                current_arg = current_arg->next;
-                if (current_arg != NULL && current_arg->type == word_type) {
-                    outputs[output_count] = current_arg->value;
-                    output_append[output_count] = is_append; // Mark 1 if append, 0 if truncate
-                    output_count++;
-                } else {
-                    syntax_error = 1; break; // Missing filename after > or >>
-                }
-            }
-            current_arg = current_arg->next;
-        }
-        args[arg_count] = NULL; // Crucial NULL termination for execv
-
-        if (syntax_error) {
-            printf("cshell: invalid syntax\n");
-        } else {
-            // Pass the extracted arrays down to the executor
-            execute_external_command(args, inputs, input_count, outputs, output_append, output_count);
-        }
+        execute_pipeline(token_list);
     }
 }

@@ -56,123 +56,226 @@ int resolve_command_path(const char* command, char* resolved_path) {
     return 0;
 }
 
-int execute_external_command(char** args, char** inputs, int input_count, char** outputs, int* output_append, int output_count) {
-    char resolved_path[4096];
+void execute_pipeline(token* token_list) {
+    token* pipeline_cmds[256]; //array to hold the start token of each command separated by |
+    int cmd_count = 0;
+    
+    token* current = token_list;
+    pipeline_cmds[cmd_count++] = current;
 
-    if(!resolve_command_path(args[0], resolved_path)){ //finding program
-        printf("cshell: command not found (%s)\n", args[0]);
-        return -1;
-    }
-
-    //multiplexer phase 1: input combination
-    FILE* in_tmp = NULL; //glues a.txt and b.txt into this file and later we give to the command
-    int in_fd = -1;
-
-    if(input_count > 0){
-        in_tmp = tmpfile(); //create hidden file to hold all combined inputs
-        for(int i = 0; i < input_count; i++){ //loop through every input file provided by user eg a.txt, b.txt. open them in read only mode
-            int fd = open(inputs[i], O_RDONLY);
-            if(fd < 0){
-                printf("cshell: no such file or directory\n"); //spec requirement if input file is missing
-                if(in_tmp) fclose(in_tmp);
-                return -1;
+    //phase 1: scan the line and split it at every pipe (|)
+    while(current != NULL){
+        if(current->type == pipe_type){
+            if(current->next != NULL && current->next->type == word_type){
+                pipeline_cmds[cmd_count++] = current->next; //save the start of the next command
+            }else{
+                printf("cshell: invalid syntax\n"); //trailing pipe like "ls |" or "ls | | cat"
+                return;
             }
-            
-            char buf[4096]; //reading file in 4096 byte chunks and dump in in_tmp
-            int bytes;
-            while((bytes = read(fd, buf, sizeof(buf))) > 0){
-                fwrite(buf, 1, bytes, in_tmp); //write contents of user file into temp file
-            }
-            close(fd);
         }
-        fflush(in_tmp); //force os to write ram data to disk
-        rewind(in_tmp); //bring pointer back to start of temp file so command can read it
-        in_fd = fileno(in_tmp); //grab raw integer file descriptor
+        current = current->next;
     }
 
-    //multiplexer phase 2: output pre-check
-    //we check permissions now so we can abort before forking if user doesnt have write access
-    for(int i = 0; i < output_count; i++){
-        int flags = O_WRONLY | O_CREAT; //flags are binary in c
-        if(output_append[i]) flags |= O_APPEND; //bitwise OR operator to add append flag. output_append[i]=1 only if >> found
-        else flags |= O_TRUNC; //trunc flag deletes all existing text in file
+    int prev_pipe_fd = -1; //holds the read end of the previous pipe so the next command can read from it
+    pid_t pids[256]; //array to store all child process IDs so we can wait for them all at the end
+
+    //phase 2: loop through every command in the pipeline one by one
+    for(int i = 0; i < cmd_count; i++){
         
-        int test_fd = open(outputs[i], flags, 0644); //0644 gives rw-r--r-- permissions
-        if(test_fd < 0){
-            printf("cshell: unable to create file for writing\n"); //spec requirement
-            if(in_tmp) fclose(in_tmp);
-            return -1;
-        }
-        close(test_fd); //close it immediately, we will reopen it later to write actual data
-    }
+        //1. parse the specific arguments and redirections for THIS pipeline stage
+        char* args[256]; 
+        int arg_count = 0;
+        char* inputs[256]; 
+        int input_count = 0;
+        char* outputs[256]; 
+        int output_append[256]; 
+        int output_count = 0;
+        int syntax_error = 0;
 
-    FILE* out_tmp = NULL;
-    int out_fd = -1;
-
-    if(output_count > 0){
-        out_tmp = tmpfile(); //hidden file to capture the commands output
-        out_fd = fileno(out_tmp);
-    }
-
-    pid_t pid = fork(); //needed to hold id of running process
-
-    if(pid < 0){
-        perror("cshell");
-        if(in_tmp) fclose(in_tmp);
-        if(out_tmp) fclose(out_tmp);
-        return -1;
-    }
-
-    else if(pid == 0){ //inside child fork as pid = 0
-        if(args[0][0] == '%'){ //if user types %ls or sum like that, we move pointer forward to make it think user type ls
-            args[0] = args[0] + 1;
-        }
-
-        //dup2 forces standard streams to point to our hidden files instead of the terminal screen
-        if(in_fd != -1) dup2(in_fd, STDIN_FILENO); //dup connects one std input/output to file at a time
-        if(out_fd != -1) dup2(out_fd, STDOUT_FILENO);
-
-        execv(resolved_path, args); //exec command called. if it works, child process is replaced by new data
-
-        perror("cshell"); //since child did not get replaced by new data, we knew the exec command failed
-        exit(EXIT_FAILURE);
-    }
-
-    else{
-        int status;
-        waitpid(pid, &status, 0); //wait until process with id = pid terminates
-
-        //multiplexer phase 3: distribute captured output to all requested files
-        if(output_count > 0){
-            fflush(out_tmp);
-            rewind(out_tmp); //rewind our capture file to the beginning
-
-            int dest_fds[256];
-            for(int i = 0; i < output_count; i++){ //open all destination files at once
-                int flags = O_WRONLY | O_CREAT;
-                if(output_append[i]) flags |= O_APPEND;
-                else flags |= O_TRUNC;
-                dest_fds[i] = open(outputs[i], flags, 0644); 
+        token* curr = pipeline_cmds[i];
+        while(curr != NULL && curr->type != pipe_type){ //stop parsing when we hit the next pipe
+            if(curr->type == word_type){
+                if(arg_count < 255) args[arg_count++] = curr->value;
             }
-
-            char buf[4096];
-            int bytes;
-            while((bytes = fread(buf, 1, sizeof(buf), out_tmp)) > 0){ //read chunk from capture file(trapped output 4096 sized chunks at a time)
-                for(int i = 0; i < output_count; i++){ //loop to write exact same chunk to every file user requested
-                    if(dest_fds[i] >= 0){
-                        write(dest_fds[i], buf, bytes); //write exact chunk to every user requested file
-                    }
+            else if(curr->type == less_than_type){
+                curr = curr->next;
+                if(curr && curr->type == word_type) inputs[input_count++] = curr->value;
+                else{ 
+                    syntax_error = 1;
+                    break; 
+                }
+            } 
+            else if(curr->type == greater_than_type || curr->type == greater_than_greater_than_type){
+                int is_app = (curr->type == greater_than_greater_than_type);
+                curr = curr->next;
+                if(curr && curr->type == word_type){
+                    outputs[output_count] = curr->value;
+                    output_append[output_count++] = is_app;
+                } 
+                else{ 
+                    syntax_error = 1; 
+                    break; 
                 }
             }
+            curr = curr->next;
+        }
+        args[arg_count] = NULL; //crucial NULL termination for execv
 
-            for(int i = 0; i < output_count; i++){
-                if(dest_fds[i] >= 0) close(dest_fds[i]); //close all target files
+        if (syntax_error) {
+            printf("cshell: invalid syntax\n");
+            if (prev_pipe_fd != -1) close(prev_pipe_fd);
+            return;
+        }
+
+        //2. resolve path for this specific command
+        char resolved_path[4096];
+        int path_found = resolve_command_path(args[0], resolved_path);
+
+        //3. create the OS pipe (but not for the very last command, as it prints to screen or file)
+        int pipe_fd[2]; //pipe_fd[0] for the read end, pipe_fd[1] for write end
+        if (i < cmd_count - 1) {
+            if (pipe(pipe_fd) < 0) { 
+                perror("cshell"); 
+                return; 
             }
         }
 
-        if(in_tmp) fclose(in_tmp);
-        if(out_tmp) fclose(out_tmp); //deletes the invisible temp files automatically
+        //4. fork the child process for this command
+        pid_t pid = fork(); //needed to hold id of running process
+        
+        if(pid < 0){
+            perror("cshell");
+            return;
+        }
+        
+        else if(pid == 0){ //inside child fork as pid = 0
+            
+            //wire the pipes using dup2!
+            if (prev_pipe_fd != -1) { //if there is a pipe behind us, read from it instead of keyboard
+                dup2(prev_pipe_fd, STDIN_FILENO);
+                close(prev_pipe_fd);
+            }
+            if (i < cmd_count - 1) { //if there is a pipe ahead of us, write to it instead of screen
+                dup2(pipe_fd[1], STDOUT_FILENO);
+                close(pipe_fd[0]); //child doesnt need to read from its own pipe
+                close(pipe_fd[1]);
+            }
+
+            //spec requirement: if command missing, print error but let rest of pipeline run (don't crash shell)
+            if (!path_found) {
+                printf("cshell: command not found (%s)\n", args[0]);
+                exit(EXIT_FAILURE); //exiting here safely closes the pipe so the next command gets EOF
+            }
+
+            if(args[0][0] == '%'){ //if user types %ls or sum like that, we move pointer forward to make it think user type ls
+                args[0] = args[0] + 1;
+            }
+
+            //multiplexer phase 1: input combination (overrides the pipe if user provides '<')
+            if(input_count > 0){
+                FILE* in_tmp = tmpfile(); //create hidden file to hold all combined inputs
+                for(int k = 0; k < input_count; k++){ //loop through every input file provided by user eg a.txt, b.txt. open them in read only mode
+                    int fd = open(inputs[k], O_RDONLY);
+                    if(fd < 0){
+                        printf("cshell: no such file or directory\n"); //spec requirement if input file is missing
+                        exit(EXIT_FAILURE);
+                    }
+                    char buf[4096]; //reading file in 4096 byte chunks and dump in in_tmp
+                    int bytes;
+                    while((bytes = read(fd, buf, sizeof(buf))) > 0){
+                        fwrite(buf, 1, bytes, in_tmp); //write contents of user file into temp file
+                    }
+                    close(fd);
+                }
+                fflush(in_tmp); //force os to write ram data to disk
+                rewind(in_tmp); //bring pointer back to start of temp file so command can read it
+                dup2(fileno(in_tmp), STDIN_FILENO); //dup connects one std input to file at a time, overriding pipe
+            }
+
+            //multiplexer phase 2 & 3: output multiplexer (overrides the pipe if user provides '>')
+            if(output_count > 0){
+                //we check permissions now so we can abort before forking if user doesnt have write access
+                for(int k = 0; k < output_count; k++){
+                    int flags = O_WRONLY | O_CREAT; //flags are binary in c
+                    if(output_append[k]) flags |= O_APPEND; //bitwise OR operator to add append flag. output_append[i]=1 only if >> found
+                    else flags |= O_TRUNC; //trunc flag deletes all existing text in file
+                    
+                    int test_fd = open(outputs[k], flags, 0644); //0644 gives rw-r--r-- permissions
+                    if(test_fd < 0){
+                        printf("cshell: unable to create file for writing\n"); //spec requirement
+                        exit(EXIT_FAILURE);
+                    }
+                    close(test_fd); //close it immediately, we will reopen it later to write actual data
+                }
+
+                FILE* out_tmp = tmpfile(); //hidden file to capture the commands output
+                int out_fd = fileno(out_tmp);
+
+                //THE GRANDCHILD TRICK: To multiplex output while supporting pipes, we fork again!
+                pid_t gc_pid = fork();
+                if (gc_pid == 0) {
+                    //inside grandchild fork: this process just redirects its output to out_tmp and runs the program
+                    dup2(out_fd, STDOUT_FILENO);
+                    execv(resolved_path, args); //exec command called. if it works, grandchild process is replaced by new data
+                    perror("cshell"); 
+                    exit(EXIT_FAILURE);
+                } 
+                else {
+                    //inside child fork (parent of grandchild): waits for grandchild to finish, then copies the output
+                    int st; 
+                    waitpid(gc_pid, &st, 0);
+
+                    fflush(out_tmp);
+                    rewind(out_tmp); //rewind our capture file to the beginning
+
+                    int dest_fds[256];
+                    for(int k = 0; k < output_count; k++){ //open all destination files at once
+                        int flags = O_WRONLY | O_CREAT;
+                        if(output_append[k]) flags |= O_APPEND;
+                        else flags |= O_TRUNC;
+                        dest_fds[k] = open(outputs[k], flags, 0644); 
+                    }
+
+                    char buf[4096];
+                    int bytes;
+                    while((bytes = fread(buf, 1, sizeof(buf), out_tmp)) > 0){ //read chunk from capture file(trapped output 4096 sized chunks at a time)
+                        for(int k = 0; k < output_count; k++){ //loop to write exact same chunk to every file user requested
+                            if(dest_fds[k] >= 0){
+                                write(dest_fds[k], buf, bytes); //write exact chunk to every user requested file
+                            }
+                        }
+                    }
+
+                    for(int k = 0; k < output_count; k++){
+                        if(dest_fds[k] >= 0) close(dest_fds[k]); //close all target files
+                    }
+                    
+                    exit(EXIT_SUCCESS); //child dies happily after distributing the output
+                }
+            } 
+            else {
+                //no output redirection requested, execute normally (output goes into pipe or terminal screen)
+                execv(resolved_path, args);
+                perror("cshell"); //since child did not get replaced by new data, we knew the exec command failed
+                exit(EXIT_FAILURE);
+            }
+        } 
+        else {
+            //inside parent (C-Shell): clean up pipes and save pid
+            pids[i] = pid; //save child id so we can wait for all of them at the end
+            
+            if (prev_pipe_fd != -1) close(prev_pipe_fd); //close the old read end so we don't leak memory
+            
+            if (i < cmd_count - 1) {
+                close(pipe_fd[1]); //parent must close the write end of the pipe to prevent deadlocks!
+                prev_pipe_fd = pipe_fd[0]; //save the new read end for the next iteration of the loop
+            }
+        }
     }
 
-    return 0;
+    //phase 3: wait for all commands in the pipeline to finish simultaneously
+    for (int i = 0; i < cmd_count; i++) {
+        int status;
+        waitpid(pids[i], &status, 0); //wait until process with id = pids[i] terminates
+    }
 }
