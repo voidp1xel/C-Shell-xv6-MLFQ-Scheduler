@@ -5,13 +5,13 @@
 #include "../include/locate.h"
 
 void locate_single_command(const char* command){
-    int found = 0; //bool variable
-    char path_buffer[4096]; //buffer to stitch directory and command - eg /usr/bin + / + python = usr/bin/python
+    int found = 0; 
+    char path_buffer[4096]; 
 
     char cwd[4096];
     if(getcwd(cwd, sizeof(cwd)) != NULL){
-        snprintf(path_buffer, sizeof(path_buffer), "%s/%s", cwd, command); //used to stitch together cwd. eg /home + / + aniket-> /home/aniket
-        if(access(path_buffer, X_OK) == 0){ //checks file permissions, if R_OK then its readbale, if X_OK then exectuable
+        snprintf(path_buffer, sizeof(path_buffer), "%s/%s", cwd, command); 
+        if(access(path_buffer, X_OK) == 0){ 
             printf("%s\n", path_buffer);
             found = 1;
         }
@@ -19,18 +19,17 @@ void locate_single_command(const char* command){
 
     char* path_env = getenv("PATH");
     if(path_env != NULL){
-        char* path_copy = strdup(path_env);  //duplicate of path_env. dynamic. clone in heap memory
-        char* dir = strtok(path_copy, ":"); //string pointer holding current direcotry token extracted by strtok->string tokeniser. extract very first directory(everything upto first :)
+        char* path_copy = strdup(path_env);  
+        char* dir = strtok(path_copy, ":"); 
 
-        while(dir != NULL){ //stitching command names and checking if they exist and executable and then print em
+        while(dir != NULL){ 
             snprintf(path_buffer, sizeof(path_buffer), "%s/%s", dir, command);
             
             if(access(path_buffer, X_OK) == 0){
                 printf("%s\n", path_buffer);
                 found = 1;
             }
-
-            dir = strtok(NULL, ":"); //means it tells strtok that resume from last string given until : found
+            dir = strtok(NULL, ":"); 
         }
         free(path_copy);
     }
@@ -40,9 +39,13 @@ void locate_single_command(const char* command){
     }
 }
 
-int execute_locate(char** targets, int target_count){
-    for(int i = 0; i < target_count; i++){
-        locate_single_command(targets[i]);
+int execute_locate(char** args, int arg_count){
+    if (arg_count <= 1) { //spec explicitly requires this if no args given
+        printf("locate: invalid syntax\n"); 
+        return -1;
+    }
+    for(int i = 1; i < arg_count; i++){
+        locate_single_command(args[i]);
     }
     return 0;
 }

@@ -1,6 +1,6 @@
 #ifndef LOCATE_H
 #define LOCATE_H
 
-int execute_locate(char** targets, int target_count);
+int execute_locate(char** args, int arg_count);
 
 #endif
