@@ -1,0 +1,4 @@
+ifndef SCHEDULER
+SCHEDULER = RR
+endif
+CFLAGS += -D$(SCHEDULER)

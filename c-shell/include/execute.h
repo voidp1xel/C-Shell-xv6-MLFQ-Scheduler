@@ -3,6 +3,6 @@
 
 #include "lexer.h"
 
-void execute_pipeline(token* token_list, char* home_directory, char* prev_directory);
+void execute_pipeline(token* start_token, token* end_token, int is_background, char* home_directory, char* prev_directory);
 
 #endif
