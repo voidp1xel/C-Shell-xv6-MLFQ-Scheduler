@@ -52,7 +52,7 @@ int execute_spy(char** args, int arg_count) {
 
     // Q&A 60: Check if we have permission before proceeding
     if (kill(target_pid, 0) == -1) {
-        if (errno == EPERM) printf("spy: permission denied\n");[cite: 1]
+        if (errno == EPERM) printf("spy: permission denied\n");
         else printf("spy: no such process\n");
         return -1;
     }
