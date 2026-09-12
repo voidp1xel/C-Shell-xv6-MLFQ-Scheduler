@@ -12,6 +12,7 @@
 #include "../include/peek.h"
 #include "../include/locate.h"
 #include "../include/jobs.h" 
+#include "../include/fun.h"
 
 int resolve_command_path(const char* command, char* resolved_path) {
     char cwd[4096];
@@ -61,8 +62,8 @@ int resolve_command_path(const char* command, char* resolved_path) {
     return 0;
 }
 
-void execute_pipeline(token* start_token, token* end_token, int is_background, char* home_directory, char* prev_directory) {
-    if (start_token == end_token || start_token == NULL) return; //empty command failsafe
+int execute_pipeline(token* start_token, token* end_token, int is_background, char* home_directory, char* prev_directory) {
+    if (start_token == end_token || start_token == NULL) return 0; //empty command failsafe
 
     token* pipeline_cmds[256]; 
     int cmd_count = 0;
@@ -77,7 +78,7 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
                 pipeline_cmds[cmd_count++] = current->next; 
             }else{
                 printf("cshell: invalid syntax\n"); 
-                return;
+                return -1;
             }
         }
         current = current->next;
@@ -128,7 +129,7 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
         if (syntax_error) {
             printf("cshell: invalid syntax\n");
             if (prev_pipe_fd != -1) close(prev_pipe_fd);
-            return;
+            return -1;
         }
 
         //2. Built-in Intrinsic Detection
@@ -136,7 +137,8 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
         if (args[0] && (strcmp(args[0], "hop") == 0 || strcmp(args[0], "reveal") == 0 ||
                         strcmp(args[0], "peek") == 0 || strcmp(args[0], "locate") == 0 ||
                         strcmp(args[0], "activities") == 0 || strcmp(args[0], "ping") == 0 ||
-                        strcmp(args[0], "resume") == 0)) {
+                        strcmp(args[0], "resume") == 0 || strcmp(args[0], "spy") == 0 ||
+                        strcmp(args[0], "snoop") == 0)) {
             is_builtin = 1;
         }
 
@@ -144,19 +146,19 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
         if (is_builtin && cmd_count == 1) {
             if (strcmp(args[0], "hop") == 0) {
                 execute_hop(args, arg_count, home_directory, prev_directory);
-                return; //exit pipeline immediately so we don't trigger terminal control and freeze!
+                return 0; //exit pipeline immediately so we don't trigger terminal control and freeze!
             }
             if (strcmp(args[0], "activities") == 0) {
                 execute_activities();
-                return;
+                return 0;
             }
             if (strcmp(args[0], "ping") == 0) {
                 execute_ping(args, arg_count);
-                return;
+                return 0;
             }
             if (strcmp(args[0], "resume") == 0) {
                 execute_resume(args, arg_count);
-                return;
+                return 0;
             }
         }
 
@@ -164,10 +166,17 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
         int path_found = 0;
         if (!is_builtin) path_found = resolve_command_path(args[0], resolved_path);
 
+        // SEQUENCE ABORTION LOGIC (D1 / C4 constraints)
+        if (!is_builtin && !path_found && cmd_count == 1) {
+            printf("cshell: command not found (%s)\n", args[0][0] == '%' ? args[0] + 1 : args[0]);
+            if (prev_pipe_fd != -1) close(prev_pipe_fd);
+            return -1; // Tell parser to abort sequence
+        }
+
         //3. create the OS pipe
         int pipe_fd[2]; 
         if (i < cmd_count - 1) {
-            if (pipe(pipe_fd) < 0) { perror("cshell"); return; }
+            if (pipe(pipe_fd) < 0) { perror("cshell"); return -1; }
         }
 
         //4. fork the child process
@@ -175,7 +184,7 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
         
         if(pid < 0){
             perror("cshell");
-            return;
+            return -1;
         }
         else if(pid == 0){ //inside child fork as pid = 0
             
@@ -206,7 +215,7 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
             }
 
             if (!is_builtin && !path_found) {
-                printf("cshell: command not found (%s)\n", args[0]);
+                printf("cshell: command not found (%s)\n", args[0][0] == '%' ? args[0] + 1 : args[0]);
                 exit(EXIT_FAILURE); 
             }
 
@@ -254,6 +263,8 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
                         if (strcmp(args[0], "reveal") == 0) execute_reveal(args, arg_count, home_directory, prev_directory);
                         else if (strcmp(args[0], "peek") == 0) execute_peek(args, arg_count);
                         else if (strcmp(args[0], "locate") == 0) execute_locate(args, arg_count);
+                        else if (strcmp(args[0], "spy") == 0) execute_spy(args, arg_count);
+                        else if (strcmp(args[0], "snoop") == 0) execute_snoop(args, arg_count);
                         exit(EXIT_SUCCESS); 
                     } 
                     else {
@@ -294,6 +305,8 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
                     if (strcmp(args[0], "reveal") == 0) execute_reveal(args, arg_count, home_directory, prev_directory);
                     else if (strcmp(args[0], "peek") == 0) execute_peek(args, arg_count);
                     else if (strcmp(args[0], "locate") == 0) execute_locate(args, arg_count);
+                    else if (strcmp(args[0], "spy") == 0) execute_spy(args, arg_count);
+                    else if (strcmp(args[0], "snoop") == 0) execute_snoop(args, arg_count);
                     exit(EXIT_SUCCESS); 
                 } 
                 else {
@@ -342,4 +355,6 @@ void execute_pipeline(token* start_token, token* end_token, int is_background, c
 
         tcsetpgrp(STDIN_FILENO, getpgrp()); //reclaim terminal control using getpgrp() safely!
     }
+    
+    return 0; // Success
 }
