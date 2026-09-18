@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <signal.h>
-#include "../include/execute.h"'
+#include "../include/execute.h"
 #include "../include/hop.h"
 #include "../include/reveal.h"
 #include "../include/peek.h"
@@ -222,7 +222,7 @@ int execute_pipeline(token* start_token, token* end_token, int is_background, ch
             // If it's a foreground job, we hand over control of the physical terminal to this new process group.
             if (!is_background) {
                 tcsetpgrp(STDIN_FILENO, pgid);
-            
+            }
 
             // Wire the pipes using dup2! dup2 overwrites standard input (0) or output (1).
             if (prev_pipe_fd != -1) { 
