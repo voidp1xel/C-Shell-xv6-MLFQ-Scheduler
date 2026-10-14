@@ -2,20 +2,22 @@
 #include "kernel/stat.h"
 #include "user/user.h"
 
-int main() {
+/*
+ * Workload generator for the Multi-Level Feedback Queue (MLFQ) scheduler.
+ * Spawns compute-intensive processes with staggered CPU burst durations
+ * to verify time-slice demotion across queues and periodic priority boosting.
+ */
+int main(void) {
     printf("Starting MLFQ Scheduler Test...\n");
-    printf("Spam Ctrl+P now!\n");
+    printf("Press Ctrl+P to observe process queue demotion (q:) and ticks used (t:)\n");
 
-    // Spawn 3 processes with varying CPU burst lengths
     for (int i = 0; i < 3; i++) {
         int pid = fork();
         if (pid == 0) {
-            // Massive nested loops to force the processes to stay alive for several seconds
-            // Process 0 does the least work, Process 2 does the most.
             int outer_loops = 300 * (i + 1);
-            for(int k = 0; k < outer_loops; k++) {
-                for(volatile int j = 0; j < 10000000; j++) {
-                    // Heavy computation to eat up time slices
+            for (int k = 0; k < outer_loops; k++) {
+                for (volatile int j = 0; j < 10000000; j++) {
+                    /* Compute-bound CPU workload */
                 }
             }
             printf("Process %d finished burst.\n", i);
@@ -23,11 +25,10 @@ int main() {
         }
     }
 
-    // Parent waits for all 3 children to finish
     wait(0);
     wait(0);
     wait(0);
-    
-    printf("Test complete!\n");
+
+    printf("MLFQ workload completed.\n");
     exit(0);
 }

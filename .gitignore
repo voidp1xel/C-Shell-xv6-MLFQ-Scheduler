@@ -1,16 +1,26 @@
-# Binaries & build artifacts
+# Build artifacts
 *.o
+*.d
 *.out
 shell.out
 c-shell/shell.out
+c-shell/build/
 
-# xv6 build artifacts
+# Runtime state files
+.cshell_frecency
+
+# xv6 kernel build artifacts & disk images
 xv6/fs.img
 xv6/xv6.img
-xv6/kernel/kernel
+xv6/kernel/kernel*
+xv6/mkfs/mkfs*
 xv6/user/_*
+xv6/user/usys.S
+xv6/user/usys *.S
 
-# Editor / OS metadata
+# Editor and OS metadata
 .DS_Store
-*.swp
+*/.DS_Store
 *~
+*.swp
+*.swo

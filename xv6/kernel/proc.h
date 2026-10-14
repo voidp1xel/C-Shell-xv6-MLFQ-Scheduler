@@ -103,7 +103,7 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   #ifdef MLFQ
-  int queue;                   // current mlfq queue level (0 to 3)
-  int ticks_used;              // tracks how many ticks used in the current time slice
+  int queue;                   /* Current MLFQ priority level (0-3) */
+  int ticks_used;              /* Ticks consumed in current time slice */
   #endif
 };

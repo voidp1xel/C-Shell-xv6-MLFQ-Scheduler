@@ -453,12 +453,12 @@ scheduler(void)
     int found = 0;
 
 #ifdef MLFQ
-    // safely grab current global ticks
+    /* Read current system ticks with lock protection */
     acquire(&tickslock);
     uint current_ticks = ticks;
     release(&tickslock);
 
-    // priority boosting (anti-starvation): bump everyone to queue 0 every 48 ticks
+    /* Periodic priority boosting to prevent starvation across queues */
     if (current_ticks - last_boost_tick >= 48) {
       for (p = proc; p < &proc[NPROC]; p++) {
         acquire(&p->lock);
@@ -471,7 +471,7 @@ scheduler(void)
       last_boost_tick = current_ticks;
     }
 
-    // strict priority selection: find highest queue that has a runnable process
+    /* Strict priority scheduling: locate highest priority queue containing runnable jobs */
     int highest_q = 3;
     for (p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);

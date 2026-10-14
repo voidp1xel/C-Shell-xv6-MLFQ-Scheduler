@@ -81,25 +81,25 @@ usertrap(void)
   if (killed(p))
     kexit(-1);
 
-// give up the CPU if this is a timer interrupt.
-if (which_dev == 2) {
+  /* Give up CPU on timer interrupt according to scheduler policy */
+  if (which_dev == 2) {
 #ifdef MLFQ
     struct proc *p = myproc();
     if (p && p->state == RUNNING) {
       int slice_limits[] = {1, 4, 8, 16};
       p->ticks_used++;
-      
-      // Only surrender the CPU when the full time slice is consumed
+
+      /* Demote process to lower priority queue upon exhausting current time slice */
       if (p->ticks_used >= slice_limits[p->queue]) {
-        if (p->queue < 3) p->queue++; // demote to lower queue
-        p->ticks_used = 0; // reset slice counter
-        yield(); 
+        if (p->queue < 3) p->queue++;
+        p->ticks_used = 0;
+        yield();
       }
     }
 #else
-    yield(); // Default xv6 Round-Robin behavior (yields every tick)
+    yield();
 #endif
-}
+  }
 
   prepare_return();
 
@@ -169,25 +169,24 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-// give up the CPU if this is a timer interrupt.
-if (which_dev == 2 && myproc() != 0) {
+  /* Give up CPU on timer interrupt if a process is running */
+  if (which_dev == 2 && myproc() != 0) {
 #ifdef MLFQ
     struct proc *p = myproc();
     if (p->state == RUNNING) {
       int slice_limits[] = {1, 4, 8, 16};
       p->ticks_used++;
-      
-      // Only surrender the CPU when the full time slice is consumed
+
       if (p->ticks_used >= slice_limits[p->queue]) {
-        if (p->queue < 3) p->queue++; // demote
-        p->ticks_used = 0; // reset
+        if (p->queue < 3) p->queue++;
+        p->ticks_used = 0;
         yield();
       }
     }
 #else
-    yield(); // Default xv6 Round-Robin behavior
+    yield();
 #endif
-}
+  }
 
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.
