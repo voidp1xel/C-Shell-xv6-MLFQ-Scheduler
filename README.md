@@ -156,7 +156,6 @@ The MLFQ implementation was benchmarked against Round-Robin (RR) and First-Come-
 .
 ├── README.md                   # Project documentation
 ├── .gitignore                  # Git ignore rules for build artifacts and OS files
-├── AI Usage Report.pdf         # AI consultation disclosure
 │
 ├── c-shell/                    # POSIX C-Shell source directory
 │   ├── Makefile                # C-Shell build configuration (C23, -Wall -Wextra -Werror)

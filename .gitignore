@@ -24,3 +24,9 @@ xv6/user/usys *.S
 *~
 *.swp
 *.swo
+
+# AI usage reports
+AI Usage Report.pdf
+*AI*usage*
+*AI*Usage*
+
